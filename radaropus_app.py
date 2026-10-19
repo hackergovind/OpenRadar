@@ -1010,13 +1010,37 @@ HTML_PAGE = """<!DOCTYPE html>
     try {
       const res = await fetch(`/api/remedy_details?id=${remedyId}`);
       const data = await res.json();
+
+      let mediaHtml = '';
+      if (data.images && data.images.length > 0) {
+        mediaHtml += '<div style="margin-top: 14px;"><strong style="display:block; margin-bottom: 6px;"><i class="fa-solid fa-camera"></i> Botanical / Substance Photos (' + data.images.length + '):</strong><div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;">';
+        data.images.forEach(img => {
+          mediaHtml += `<a href="/api/media/image?file=${encodeURIComponent(img)}" target="_blank"><img src="/api/media/image?file=${encodeURIComponent(img)}" style="height: 100px; width: 130px; object-fit: cover; border-radius: 4px; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" title="${escapeHtml(img)}" /></a>`;
+        });
+        mediaHtml += '</div></div>';
+      }
+
+      if (data.sounds && data.sounds.length > 0) {
+        mediaHtml += '<div style="margin-top: 14px;"><strong style="display:block; margin-bottom: 6px;"><i class="fa-solid fa-volume-high" style="color: #0284c7;"></i> Audio Lectures & Clinician Explanations:</strong>';
+        data.sounds.forEach(snd => {
+          mediaHtml += `
+            <div style="margin-bottom: 6px; padding: 6px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;">
+              <span style="font-size: 11px; font-weight: 600; display: block; margin-bottom: 4px;">${escapeHtml(snd)}</span>
+              <audio controls style="width: 100%; height: 32px;" src="/api/media/sound?file=${encodeURIComponent(snd)}"></audio>
+            </div>
+          `;
+        });
+        mediaHtml += '</div>';
+      }
+
       body.innerHTML = `
-        <div style="margin-bottom: 10px;"><strong>Abbreviation:</strong> ${data.abbrev || '-'}</div>
-        <div style="margin-bottom: 10px;"><strong>Full Name:</strong> ${data.name || '-'}</div>
-        <div style="margin-bottom: 10px;"><strong>Scientific / Botanical:</strong> ${data.scientific_name || '-'}</div>
-        <div style="margin-bottom: 10px;"><strong>Common Names:</strong> ${data.common_names || '-'}</div>
-        <div style="margin-bottom: 10px;"><strong>Is Nosode:</strong> ${data.nosode ? 'Yes' : 'No'}</div>
-        <div style="margin-bottom: 10px;"><strong>Synthesis Frequency:</strong> ${data.frequency || 0} occurrences</div>
+        <div style="margin-bottom: 8px;"><strong>Abbreviation:</strong> ${data.abbrev || '-'}</div>
+        <div style="margin-bottom: 8px;"><strong>Full Name:</strong> ${data.name || '-'}</div>
+        <div style="margin-bottom: 8px;"><strong>Scientific / Botanical:</strong> ${data.scientific_name || '-'}</div>
+        <div style="margin-bottom: 8px;"><strong>Common Names:</strong> ${data.common_names || '-'}</div>
+        <div style="margin-bottom: 8px;"><strong>Is Nosode:</strong> ${data.nosode ? 'Yes' : 'No'}</div>
+        <div style="margin-bottom: 8px;"><strong>Synthesis Frequency:</strong> ${data.frequency || 0} occurrences</div>
+        ${mediaHtml}
         <div style="margin-top: 14px; padding: 10px; background: #f1f5f9; border-radius: 4px; font-size: 11.5px;">
           <strong>Research Notes:</strong><br>${data.research_info || 'No external research notes.'}
         </div>
@@ -1186,9 +1210,64 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
             '''
             try:
                 rows = run_query_json(sql)
-                self.send_json(rows[0] if rows else {})
+                data = rows[0] if rows else {}
+                abbrev = data.get("abbrev", "").rstrip(".")
+                
+                # Check images
+                img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Image")
+                images = []
+                if os.path.exists(img_dir) and abbrev:
+                    for f in os.listdir(img_dir):
+                        if f.lower().startswith(abbrev.lower() + ".") or f.lower().startswith(abbrev.lower() + "-"):
+                            images.append(f)
+                data["images"] = images
+
+                # Check sounds
+                snd_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Sound")
+                sounds = []
+                if os.path.exists(snd_dir) and abbrev:
+                    for f in os.listdir(snd_dir):
+                        if f.lower().startswith(abbrev.lower() + ".") or f.lower().startswith(abbrev.lower() + " "):
+                            sounds.append(f)
+                data["sounds"] = sounds
+
+                self.send_json(data)
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
+
+        elif path == "/api/media/image":
+            file_name = qs.get("file", [""])[0]
+            if not file_name or ".." in file_name or "/" in file_name or "\\" in file_name:
+                self.send_error(400)
+                return
+            file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Image", file_name)
+            if not os.path.exists(file_path):
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            with open(file_path, "rb") as f:
+                self.wfile.write(f.read())
+
+        elif path == "/api/media/sound":
+            file_name = qs.get("file", [""])[0]
+            if not file_name or ".." in file_name or "/" in file_name or "\\" in file_name:
+                self.send_error(400)
+                return
+            file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Sound", file_name)
+            if not os.path.exists(file_path):
+                self.send_error(404)
+                return
+            self.send_response(200)
+            if file_name.lower().endswith(".mp3"):
+                self.send_header("Content-Type", "audio/mpeg")
+            else:
+                self.send_header("Content-Type", "audio/wav")
+            self.end_headers()
+            with open(file_path, "rb") as f:
+                self.wfile.write(f.read())
         else:
             self.send_error(404)
 
