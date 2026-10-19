@@ -2,7 +2,6 @@ import os
 import sys
 import json
 import subprocess
-import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -41,57 +40,56 @@ HTML_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RadarOpus - Synthesis Repertory & Analysis System</title>
+<title>RadarOpus - Synthesis Repertory & Practice Management</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
   :root {
-    --ro-topbar-bg: #2b3e50;
-    --ro-nav-bg: #34495e;
-    --ro-panel-bg: #f8fafc;
+    --ro-topbar-bg: #1e293b;
+    --ro-nav-bg: #2b3e50;
     --ro-border: #cbd5e1;
     --ro-active-blue: #0284c7;
     --ro-active-hover: #0369a1;
-    --ro-text-main: #1e293b;
+    --ro-text-main: #0f172a;
     --ro-text-muted: #64748b;
-    --grade4-color: #dc2626; /* Red bold underlined */
+    --grade4-color: #dc2626; /* Red Bold Underlined */
     --grade3-color: #2563eb; /* Bold Blue */
     --grade2-color: #0d9488; /* Italics Teal */
-    --grade1-color: #475569; /* Normal Grey */
+    --grade1-color: #475569; /* Plain Grey */
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  body { height: 100vh; display: flex; flex-direction: column; background: #e2e8f0; color: var(--ro-text-main); overflow: hidden; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { height: 100vh; display: flex; flex-direction: column; background: #f1f5f9; color: var(--ro-text-main); overflow: hidden; }
 
-  /* RadarOpus Top Bar & Toolbar */
+  /* Top Navigation & Controls */
   #ro-header {
     background: var(--ro-topbar-bg);
     color: #fff;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
     z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   }
   .ro-menubar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 6px 14px;
-    background: #1e293b;
+    background: #0f172a;
     font-size: 13px;
   }
-  .ro-brand { font-weight: 700; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #38bdf8; letter-spacing: 0.5px; }
-  .ro-brand span { color: #f1f5f9; font-weight: 400; font-size: 12px; }
+  .ro-brand { font-weight: 700; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #38bdf8; }
+  .ro-brand span { color: #cbd5e1; font-weight: normal; font-size: 12px; }
 
   .ro-toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 14px;
-    background: #283747;
+    padding: 6px 14px;
+    background: #1e293b;
     border-top: 1px solid rgba(255,255,255,0.08);
   }
   .ro-tool-btn {
-    background: #34495e;
+    background: #334155;
     border: 1px solid rgba(255,255,255,0.15);
     color: #f1f5f9;
     padding: 5px 12px;
@@ -104,7 +102,7 @@ HTML_PAGE = """<!DOCTYPE html>
     gap: 6px;
     transition: all 0.15s;
   }
-  .ro-tool-btn:hover { background: #415b76; color: #fff; }
+  .ro-tool-btn:hover { background: #475569; color: #fff; }
   .ro-tool-btn.active { background: var(--ro-active-blue); border-color: #38bdf8; }
 
   .ro-search-container {
@@ -112,8 +110,8 @@ HTML_PAGE = """<!DOCTYPE html>
     display: flex;
     align-items: center;
     background: #fff;
-    border-radius: 5px;
-    padding: 2px 8px;
+    border-radius: 4px;
+    padding: 2px 10px;
     margin: 0 16px;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
   }
@@ -126,20 +124,30 @@ HTML_PAGE = """<!DOCTYPE html>
     font-size: 13px;
     color: #0f172a;
   }
+  .search-action-btn {
+    background: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .search-action-btn:hover { background: #0369a1; }
 
   /* Clipboards Tab Strip */
   .ro-clipboards-bar {
     display: flex;
-    background: #1e293b;
+    background: #0f172a;
     padding: 0 14px;
-    border-top: 1px solid #334155;
     gap: 2px;
   }
   .ro-clip-tab {
     padding: 6px 14px;
     font-size: 12px;
     color: #94a3b8;
-    background: #253342;
+    background: #1e293b;
     cursor: pointer;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
@@ -149,11 +157,11 @@ HTML_PAGE = """<!DOCTYPE html>
     border: 1px solid transparent;
     border-bottom: none;
   }
-  .ro-clip-tab:hover { color: #f1f5f9; background: #2c3e50; }
-  .ro-clip-tab.active { background: #f8fafc; color: #0284c7; font-weight: 600; border-color: #cbd5e1; }
+  .ro-clip-tab:hover { color: #f1f5f9; background: #334155; }
+  .ro-clip-tab.active { background: #ffffff; color: #0284c7; font-weight: 600; border-color: #cbd5e1; }
   .ro-clip-tab .badge { background: #0284c7; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold; }
 
-  /* Main 3-Column Layout (Chapters | Rubrics & Remedies | Repertorization Grid) */
+  /* Main 3-Column Layout */
   #ro-main-workspace {
     flex: 1;
     display: flex;
@@ -162,7 +170,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
   /* Col 1: Chapters Sidebar */
   #chapters-sidebar {
-    width: 230px;
+    width: 210px;
     background: #ffffff;
     border-right: 1px solid var(--ro-border);
     display: flex;
@@ -174,7 +182,7 @@ HTML_PAGE = """<!DOCTYPE html>
     font-weight: 700;
     text-transform: uppercase;
     color: #64748b;
-    background: #f1f5f9;
+    background: #f8fafc;
     border-bottom: 1px solid var(--ro-border);
     display: flex;
     justify-content: space-between;
@@ -186,30 +194,30 @@ HTML_PAGE = """<!DOCTYPE html>
     list-style: none;
   }
   .chapter-item {
-    padding: 8px 14px;
-    font-size: 12.5px;
+    padding: 7px 14px;
+    font-size: 12px;
     color: #334155;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid #f8fafc;
     transition: background 0.1s;
   }
-  .chapter-item:hover { background: #e0f2fe; color: #0369a1; }
-  .chapter-item.active { background: #bae6fd; color: #0369a1; font-weight: 600; border-left: 3px solid #0284c7; }
+  .chapter-item:hover { background: #f0f9ff; color: #0369a1; }
+  .chapter-item.active { background: #e0f2fe; color: #0369a1; font-weight: 700; border-left: 3px solid #0284c7; }
 
-  /* Col 2: Rubric Explorer & Remedies Display */
+  /* Col 2: Rubric Explorer & Remedies */
   #rubric-explorer-col {
     flex: 1;
     background: #ffffff;
     border-right: 1px solid var(--ro-border);
     display: flex;
     flex-direction: column;
-    min-width: 380px;
+    min-width: 400px;
   }
   .explorer-header {
-    padding: 10px 14px;
+    padding: 8px 14px;
     background: #f8fafc;
     border-bottom: 1px solid var(--ro-border);
     display: flex;
@@ -225,29 +233,39 @@ HTML_PAGE = """<!DOCTYPE html>
     gap: 6px;
     flex-wrap: wrap;
   }
-  .breadcrumb-path span { color: #64748b; font-weight: normal; }
+  .breadcrumb-nav-link {
+    color: #0284c7;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .breadcrumb-nav-link:hover { color: #0369a1; }
 
-  /* Search & Rubric List */
+  /* Filter in Chapter */
   #rubrics-filter-box {
-    padding: 8px 12px;
+    padding: 6px 12px;
     background: #f1f5f9;
     border-bottom: 1px solid var(--ro-border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
   }
   #rubrics-filter-input {
-    width: 100%;
-    padding: 6px 10px;
+    flex: 1;
+    padding: 5px 10px;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
-    font-size: 12.5px;
+    font-size: 12px;
     outline: none;
   }
+
+  /* Rubric List */
   #rubrics-list {
     flex: 1;
     overflow-y: auto;
     border-bottom: 1px solid var(--ro-border);
   }
   .rubric-row {
-    padding: 8px 12px;
+    padding: 7px 12px;
     font-size: 12.5px;
     cursor: pointer;
     display: flex;
@@ -257,39 +275,55 @@ HTML_PAGE = """<!DOCTYPE html>
   }
   .rubric-row:hover { background: #f8fafc; }
   .rubric-row.active { background: #e0f2fe; font-weight: 600; color: #0369a1; border-left: 3px solid #0284c7; }
-  .rubric-text { flex: 1; padding-right: 10px; }
+  .rubric-main-info { flex: 1; padding-right: 10px; display: flex; flex-direction: column; }
+  .rubric-full-path { font-size: 10.5px; color: #0284c7; margin-bottom: 2px; font-weight: 600; }
+  .rubric-name-text { font-size: 12.5px; color: #1e293b; }
+  .rubric-row.active .rubric-name-text { color: #0369a1; font-weight: 600; }
+  .rubric-badges-col { display: flex; gap: 6px; align-items: center; }
   .rubric-badge {
     background: #e2e8f0;
     color: #475569;
     font-size: 11px;
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: 10px;
     font-weight: 600;
+    min-width: 55px;
+    text-align: center;
   }
-  .add-to-clip-btn {
-    background: #e0f2fe;
-    color: #0369a1;
-    border: 1px solid #7dd3fc;
+  .drilldown-btn {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    padding: 2px 6px;
     border-radius: 3px;
-    padding: 2px 7px;
-    font-size: 11px;
+    font-size: 10.5px;
     cursor: pointer;
-    margin-left: 8px;
+  }
+  .drilldown-btn:hover { background: #e0f2fe; color: #0284c7; border-color: #7dd3fc; }
+  .add-to-clip-btn {
+    background: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
     display: none;
   }
   .rubric-row:hover .add-to-clip-btn { display: inline-block; }
-  .add-to-clip-btn:hover { background: #0284c7; color: #fff; }
+  .add-to-clip-btn:hover { background: #0369a1; }
 
   /* Selected Rubric Remedies Box */
   #rubric-remedies-view {
-    height: 45%;
+    height: 42%;
     display: flex;
     flex-direction: column;
-    background: #fcfcfc;
+    background: #fdfdfd;
     border-top: 2px solid #e2e8f0;
   }
   .remedies-header-bar {
-    padding: 8px 14px;
+    padding: 6px 14px;
     background: #f1f5f9;
     border-bottom: 1px solid var(--ro-border);
     display: flex;
@@ -298,11 +332,7 @@ HTML_PAGE = """<!DOCTYPE html>
     font-size: 12px;
     font-weight: 600;
   }
-  .remedy-filters {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
+  .remedy-filters { display: flex; gap: 6px; align-items: center; }
   .remedy-filters select, .remedy-filters input {
     font-size: 11px;
     padding: 3px 6px;
@@ -312,34 +342,33 @@ HTML_PAGE = """<!DOCTYPE html>
   #remedies-container {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 14px;
+    padding: 10px 14px;
     line-height: 1.8;
     font-size: 13px;
   }
   .remedy-tag {
     display: inline-block;
     padding: 2px 6px;
-    margin: 2px 4px;
+    margin: 2px 3px;
     border-radius: 3px;
     cursor: pointer;
-    transition: transform 0.1s;
     user-select: none;
   }
-  .remedy-tag:hover { transform: scale(1.08); }
+  .remedy-tag:hover { outline: 1px solid #0284c7; }
   .remedy-grade-4 { color: var(--grade4-color); font-weight: 800; text-decoration: underline; background: #fee2e2; }
   .remedy-grade-3 { color: var(--grade3-color); font-weight: 700; background: #dbeafe; }
   .remedy-grade-2 { color: var(--grade2-color); font-style: italic; background: #ccfbf1; }
   .remedy-grade-1 { color: var(--grade1-color); font-weight: 400; background: #f1f5f9; }
 
-  /* Col 3: RadarOpus Repertorization Sheet (The Core Grid) */
+  /* Col 3: RadarOpus Repertorization Sheet */
   #repertorization-col {
-    width: 480px;
+    width: 490px;
     background: #ffffff;
     display: flex;
     flex-direction: column;
   }
   .rep-header {
-    padding: 10px 14px;
+    padding: 8px 14px;
     background: #f8fafc;
     border-bottom: 1px solid var(--ro-border);
     display: flex;
@@ -347,22 +376,6 @@ HTML_PAGE = """<!DOCTYPE html>
     align-items: center;
   }
   .rep-header h3 { font-size: 13px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px; }
-  .rep-actions { display: flex; gap: 6px; }
-  .btn-sm {
-    font-size: 11px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .btn-sm:hover { background: #e2e8f0; }
-  .btn-primary-sm { background: #0284c7; color: white; border-color: #0369a1; }
-  .btn-primary-sm:hover { background: #0369a1; }
-
-  /* Repertorization Matrix Table */
   #matrix-wrapper {
     flex: 1;
     overflow: auto;
@@ -372,11 +385,11 @@ HTML_PAGE = """<!DOCTYPE html>
   table.matrix-table {
     border-collapse: collapse;
     width: 100%;
-    font-size: 12px;
+    font-size: 11.5px;
   }
   table.matrix-table th, table.matrix-table td {
     border: 1px solid #e2e8f0;
-    padding: 6px 8px;
+    padding: 5px 6px;
     text-align: center;
     white-space: nowrap;
   }
@@ -393,12 +406,6 @@ HTML_PAGE = """<!DOCTYPE html>
     color: #0369a1;
     font-size: 11px;
     cursor: pointer;
-    vertical-align: bottom;
-  }
-  .remedy-abbrev-v {
-    font-weight: 700;
-    display: block;
-    font-size: 12px;
   }
   table.matrix-table td.rubric-title-cell {
     text-align: left;
@@ -406,8 +413,7 @@ HTML_PAGE = """<!DOCTYPE html>
     overflow: hidden;
     text-overflow: ellipsis;
     background: #f8fafc;
-    font-size: 11.5px;
-    color: #1e293b;
+    font-size: 11px;
   }
   .score-cell-4 { background: #fecaca; color: #dc2626; font-weight: bold; }
   .score-cell-3 { background: #bfdbfe; color: #1d4ed8; font-weight: bold; }
@@ -416,18 +422,17 @@ HTML_PAGE = """<!DOCTYPE html>
 
   /* Bottom Details Bar */
   #ro-statusbar {
-    background: #1e293b;
+    background: #0f172a;
     color: #94a3b8;
     padding: 4px 14px;
-    font-size: 11.5px;
+    font-size: 11px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-top: 1px solid #334155;
   }
-  #ro-statusbar span strong { color: #f1f5f9; }
 
-  /* Modal Dialog for Remedy Details / Materia Medica */
+  /* Modal */
   .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -439,61 +444,47 @@ HTML_PAGE = """<!DOCTYPE html>
   }
   .modal-content {
     background: #fff;
-    width: 600px;
+    width: 580px;
     max-width: 90vw;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    border-radius: 6px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     max-height: 80vh;
   }
   .modal-header {
-    background: #2b3e50;
+    background: #1e293b;
     color: white;
-    padding: 12px 18px;
+    padding: 10px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
-  .modal-body {
-    padding: 18px;
-    overflow-y: auto;
-    font-size: 13px;
-    color: #334155;
-    line-height: 1.6;
-  }
-  .modal-footer {
-    padding: 10px 18px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    text-align: right;
-  }
+  .modal-body { padding: 16px; overflow-y: auto; font-size: 12.5px; color: #334155; line-height: 1.6; }
+  .modal-footer { padding: 8px 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: right; }
 </style>
 </head>
 <body>
 
-<!-- RadarOpus Header -->
 <div id="ro-header">
   <div class="ro-menubar">
     <div class="ro-brand">
       <i class="fa-solid fa-compass"></i> RADAR<strong>OPUS</strong> <span>Synthesis Edition 2009V (WinCHIP)</span>
     </div>
-    <div style="font-size: 11.5px; color: #cbd5e1;">
-      <i class="fa-solid fa-database"></i> Connected: <strong>PostgreSQL (RadarOpus-WinCHIP)</strong> &bull; 180,684 Rubrics &bull; 8,713 Remedies
+    <div style="font-size: 11px; color: #cbd5e1;">
+      <i class="fa-solid fa-database"></i> Connected: <strong>PostgreSQL</strong> &bull; 180,684 Rubrics &bull; 8,713 Remedies
     </div>
   </div>
 
   <div class="ro-toolbar">
-    <button class="ro-tool-btn active" title="Repertory View"><i class="fa-solid fa-book-medical"></i> Synthesis Repertory</button>
-    <button class="ro-tool-btn" id="btn-analysis-toggle" title="Repertorization Grid"><i class="fa-solid fa-chart-simple"></i> Analysis Matrix</button>
+    <button class="ro-tool-btn active"><i class="fa-solid fa-book-medical"></i> Synthesis Repertory</button>
     
     <div class="ro-search-container">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input type="text" id="global-search-input" placeholder="Quick Search Rubric (e.g. 'anxiety', 'fear dark', 'head pain morning')... Press Enter" />
+      <input type="text" id="global-search-input" placeholder="Search across all 180k rubrics (e.g. 'headache', 'anxiety dark', 'fever chill', 'stomach pain')..." />
+      <button class="search-action-btn" onclick="executeGlobalSearch()">Search</button>
     </div>
 
-    <button class="ro-tool-btn" id="btn-export-rep"><i class="fa-solid fa-file-export"></i> Export</button>
     <button class="ro-tool-btn" onclick="clearCurrentClipboard()"><i class="fa-solid fa-trash-can"></i> Clear Clip</button>
   </div>
 
@@ -517,7 +508,6 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
 </div>
 
-<!-- 3-Column Main Workspace -->
 <div id="ro-main-workspace">
   <!-- Col 1: Chapters Sidebar -->
   <div id="chapters-sidebar">
@@ -526,7 +516,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <i class="fa-solid fa-list-ol"></i>
     </div>
     <ul id="chapters-list">
-      <li style="padding: 16px; text-align: center; color: #94a3b8;">Loading chapters...</li>
+      <li style="padding: 14px; text-align: center; color: #94a3b8;">Loading chapters...</li>
     </ul>
   </div>
 
@@ -534,16 +524,17 @@ HTML_PAGE = """<!DOCTYPE html>
   <div id="rubric-explorer-col">
     <div class="explorer-header">
       <div class="breadcrumb-path" id="current-breadcrumb">
-        <i class="fa-regular fa-folder-open"></i> <span id="chapter-name-title">MIND</span> &gt; <strong id="selected-rubric-title">Select a symptom</strong>
+        <i class="fa-regular fa-folder-open"></i> <span id="breadcrumb-content">MIND</span>
       </div>
       <div>
-        <button class="btn-sm btn-primary-sm" id="btn-add-active-to-clip" onclick="addCurrentRubricToClip()"><i class="fa-solid fa-plus"></i> Take to Clipboard</button>
+        <button class="ro-tool-btn active" style="padding: 3px 8px; font-size: 11px;" id="btn-add-active-to-clip" onclick="addCurrentRubricToClip()"><i class="fa-solid fa-plus"></i> Take to Clip</button>
       </div>
     </div>
 
-    <!-- Rubrics filter search box -->
+    <!-- Rubrics filter box -->
     <div id="rubrics-filter-box">
-      <input type="text" id="rubrics-filter-input" placeholder="Filter symptoms in this chapter (e.g. anxiety, fear, delirium)..." />
+      <i class="fa-solid fa-filter" style="font-size: 11px; color: #64748b;"></i>
+      <input type="text" id="rubrics-filter-input" placeholder="Filter symptoms in this level..." />
     </div>
 
     <!-- Rubrics List -->
@@ -556,31 +547,31 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="remedies-header-bar">
         <div>
           <i class="fa-solid fa-capsules" style="color: #0284c7;"></i>
-          <strong>Remedies in Symptom:</strong> <span id="remedies-count-label">0 remedies</span>
+          <strong>Remedies in Rubric:</strong> <span id="remedies-count-label">0 remedies</span>
         </div>
         <div class="remedy-filters">
           <label style="font-size: 11px; color: #64748b;">Min Grade:</label>
           <select id="grade-filter" onchange="renderCurrentRemedies()">
-            <option value="1">All (Grades 1-4)</option>
-            <option value="2">Grade 2+ (Italics & Bold)</option>
-            <option value="3">Grade 3+ (Bold & Red)</option>
-            <option value="4">Grade 4 Only (Red)</option>
+            <option value="1">All (1-4)</option>
+            <option value="2">2+ (Italics, Bold)</option>
+            <option value="3">3+ (Bold, Red)</option>
+            <option value="4">4 Only (Red)</option>
           </select>
-          <input type="text" id="remedy-quick-search" placeholder="Filter remedy..." oninput="renderCurrentRemedies()" style="width: 90px;" />
+          <input type="text" id="remedy-quick-search" placeholder="Filter remedy..." oninput="renderCurrentRemedies()" style="width: 80px;" />
         </div>
       </div>
       <div id="remedies-container">
-        <span style="color: #94a3b8; font-style: italic;">Select any rubric above to examine remedy gradings (Red = 4, Bold Blue = 3, Teal Italics = 2, Grey = 1).</span>
+        <span style="color: #94a3b8; font-style: italic;">Select any rubric above to inspect remedies.</span>
       </div>
     </div>
   </div>
 
-  <!-- Col 3: RadarOpus Repertorization Matrix (Dynamic Scoring Sheet) -->
+  <!-- Col 3: RadarOpus Repertorization Grid -->
   <div id="repertorization-col">
     <div class="rep-header">
       <h3><i class="fa-solid fa-table-cells" style="color: #0284c7;"></i> Repertorization Sheet</h3>
-      <div class="rep-actions">
-        <select id="sort-remedy-mode" onchange="recalculateMatrix()" style="font-size: 11px; padding: 3px 6px;">
+      <div>
+        <select id="sort-remedy-mode" onchange="recalculateMatrix()" style="font-size: 11px; padding: 2px 4px;">
           <option value="score">Sort by Total Score</option>
           <option value="symptoms">Sort by Symptoms Covered</option>
           <option value="name">Sort by Name</option>
@@ -593,14 +584,14 @@ HTML_PAGE = """<!DOCTYPE html>
         <thead>
           <tr id="matrix-header-row">
             <th style="min-width: 140px; text-align: left;">Symptom (Rubric)</th>
-            <th style="width: 40px;">Rem</th>
+            <th style="width: 35px;">Rem</th>
           </tr>
         </thead>
         <tbody id="matrix-body">
           <tr>
             <td colspan="2" style="padding: 30px; text-align: center; color: #94a3b8;">
               <i class="fa-regular fa-clipboard" style="font-size: 28px; margin-bottom: 8px; display: block;"></i>
-              Clipboard is empty.<br>Click <strong>+ Take to Clipboard</strong> on any symptom to repertorize.
+              Clipboard is empty.<br>Click <strong>+ Take to Clip</strong> on any symptom to repertorize.
             </td>
           </tr>
         </tbody>
@@ -609,29 +600,21 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Bottom Status Bar -->
 <div id="ro-statusbar">
-  <div>
-    <span>Synthesis Edition: <strong>Treasure Edition 2009V</strong></span> &bull; 
-    <span>Active Clipboard: <strong id="status-active-clip">1</strong></span>
-  </div>
-  <div>
-    <span id="status-info-text">Ready. Double click any remedy for details.</span>
-  </div>
+  <div>Synthesis 2009V &bull; Active Clipboard: <strong id="status-active-clip" style="color: #fff;">1</strong></div>
+  <div>Double-click any remedy for botanical and clinical details.</div>
 </div>
 
-<!-- Remedy Detail Modal -->
+<!-- Modal -->
 <div class="modal-overlay" id="remedy-modal" onclick="closeRemedyModal(event)">
   <div class="modal-content" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h4 id="modal-remedy-name">Remedy Details</h4>
       <i class="fa-solid fa-xmark" style="cursor: pointer;" onclick="closeRemedyModal()"></i>
     </div>
-    <div class="modal-body" id="modal-remedy-body">
-      Loading remedy information...
-    </div>
+    <div class="modal-body" id="modal-remedy-body"></div>
     <div class="modal-footer">
-      <button class="btn-sm" onclick="closeRemedyModal()">Close</button>
+      <button class="ro-tool-btn" style="color: #334155; border-color: #cbd5e1; background: #fff;" onclick="closeRemedyModal()">Close</button>
     </div>
   </div>
 </div>
@@ -639,83 +622,126 @@ HTML_PAGE = """<!DOCTYPE html>
 <script>
   let activeClipboardId = 1;
   let clipboards = { 1: [], 2: [], 3: [], 4: [], 5: [] };
-  let currentChapterId = 3; // MIND default
+  let currentParentId = 3; // MIND
+  let navBreadcrumbs = [{ id: 3, name: "MIND" }];
   let currentRubric = null;
   let currentRemediesList = [];
 
-  // Init
   window.addEventListener('DOMContentLoaded', () => {
     loadChapters();
-    loadRubricsForChapter(currentChapterId, "MIND");
+    navigateToNode(3, "MIND", true);
 
-    // Global search enter
     document.getElementById('global-search-input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        performGlobalSearch(e.target.value.trim());
-      }
+      if (e.key === 'Enter') executeGlobalSearch();
     });
 
-    // Chapter filter
     let filterTimer;
     document.getElementById('rubrics-filter-input').addEventListener('input', (e) => {
       clearTimeout(filterTimer);
       filterTimer = setTimeout(() => {
-        loadRubricsForChapter(currentChapterId, null, e.target.value.trim());
+        loadChildren(currentParentId, e.target.value.trim());
       }, 300);
     });
   });
 
-  // Load Chapters (Level 1 in Synthesis 2009)
   async function loadChapters() {
     try {
       const res = await fetch('/api/chapters');
       const chapters = await res.json();
       const list = document.getElementById('chapters-list');
       list.innerHTML = '';
-      chapters.forEach((ch, idx) => {
+      chapters.forEach(ch => {
         const li = document.createElement('li');
-        li.className = 'chapter-item' + (ch.id === currentChapterId ? ' active' : '');
+        li.className = 'chapter-item' + (ch.id === currentParentId ? ' active' : '');
         li.innerHTML = `<i class="fa-regular fa-bookmark" style="font-size: 11px;"></i> ${ch.name}`;
         li.onclick = () => {
           document.querySelectorAll('.chapter-item').forEach(el => el.classList.remove('active'));
           li.classList.add('active');
-          currentChapterId = ch.id;
-          document.getElementById('rubrics-filter-input').value = '';
-          loadRubricsForChapter(ch.id, ch.name);
+          navigateToNode(ch.id, ch.name, true);
         };
         list.appendChild(li);
       });
     } catch (err) {
-      console.error("Failed to load chapters", err);
+      console.error(err);
     }
   }
 
-  // Load rubrics for chapter
-  async function loadRubricsForChapter(chapterId, chapterName, query = '') {
-    if (chapterName) {
-      document.getElementById('chapter-name-title').textContent = chapterName;
+  function navigateToNode(nodeId, nodeName, isChapter = false) {
+    if (isChapter) {
+      navBreadcrumbs = [{ id: nodeId, name: nodeName }];
+    } else {
+      const existingIdx = navBreadcrumbs.findIndex(b => b.id === nodeId);
+      if (existingIdx !== -1) {
+        navBreadcrumbs = navBreadcrumbs.slice(0, existingIdx + 1);
+      } else {
+        navBreadcrumbs.push({ id: nodeId, name: nodeName });
+      }
     }
+    currentParentId = nodeId;
+    updateBreadcrumbUI();
+    document.getElementById('rubrics-filter-input').value = '';
+    loadChildren(nodeId);
+  }
+
+  function updateBreadcrumbUI() {
+    const container = document.getElementById('breadcrumb-content');
+    container.innerHTML = '';
+    navBreadcrumbs.forEach((b, idx) => {
+      if (idx > 0) {
+        const sep = document.createElement('span');
+        sep.textContent = ' > ';
+        sep.style.color = '#94a3b8';
+        container.appendChild(sep);
+      }
+      const span = document.createElement('span');
+      if (idx === navBreadcrumbs.length - 1) {
+        span.innerHTML = `<strong>${escapeHtml(b.name)}</strong>`;
+      } else {
+        span.className = 'breadcrumb-nav-link';
+        span.textContent = b.name;
+        span.onclick = () => navigateToNode(b.id, b.name);
+      }
+      container.appendChild(span);
+    });
+  }
+
+  async function loadChildren(parentId, q = '') {
     const list = document.getElementById('rubrics-list');
     list.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8;">Loading rubrics...</div>';
 
     try {
-      const res = await fetch(`/api/rubrics?chapter_id=${chapterId}&q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/rubrics?parent_id=${parentId}&q=${encodeURIComponent(q)}`);
       const rubrics = await res.json();
       list.innerHTML = '';
       if (!rubrics || rubrics.length === 0) {
-        list.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8;">No rubrics found.</div>';
+        list.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8;">No sub-symptoms under this rubric.</div>';
         return;
       }
 
       rubrics.forEach(r => {
         const div = document.createElement('div');
         div.className = 'rubric-row' + (currentRubric && currentRubric.id === r.id ? ' active' : '');
+        
+        let pathHtml = '';
+        if (r.parent_path) {
+          pathHtml = `<div class="rubric-full-path">${escapeHtml(r.parent_path)}</div>`;
+        }
+
+        let drillBtnHtml = '';
+        if (r.has_child > 0) {
+          drillBtnHtml = `<button class="drilldown-btn" onclick="event.stopPropagation(); navigateToNode(${r.id}, '${escapeQuote(r.text)}')"><i class="fa-solid fa-folder-tree"></i> Sub-rubrics (${r.has_child})</button>`;
+        }
+
         div.innerHTML = `
-          <div class="rubric-text">
-            <span>${escapeHtml(r.text)}</span>
+          <div class="rubric-main-info">
+            ${pathHtml}
+            <span class="rubric-name-text">${escapeHtml(r.text)}</span>
           </div>
-          <span class="rubric-badge">${r.remedy_count} rem</span>
-          <button class="add-to-clip-btn" onclick="event.stopPropagation(); addRubricToClip(${r.id}, '${escapeQuote(r.text)}', ${r.remedy_count})">+ Clip</button>
+          <div class="rubric-badges-col">
+            ${drillBtnHtml}
+            <span class="rubric-badge">${r.remedy_count} rem</span>
+            <button class="add-to-clip-btn" onclick="event.stopPropagation(); addRubricToClip(${r.id}, '${escapeQuote(r.full_path || r.text)}', ${r.remedy_count})">+ Clip</button>
+          </div>
         `;
         div.onclick = () => {
           document.querySelectorAll('.rubric-row').forEach(el => el.classList.remove('active'));
@@ -725,7 +751,6 @@ HTML_PAGE = """<!DOCTYPE html>
         list.appendChild(div);
       });
 
-      // Select first rubric by default if none selected
       if (rubrics.length > 0 && !currentRubric) {
         selectRubric(rubrics[0]);
       }
@@ -734,10 +759,8 @@ HTML_PAGE = """<!DOCTYPE html>
     }
   }
 
-  // Select a Rubric and fetch remedies
   async function selectRubric(r) {
     currentRubric = r;
-    document.getElementById('selected-rubric-title').textContent = r.text;
     const remediesBox = document.getElementById('remedies-container');
     remediesBox.innerHTML = '<span style="color: #94a3b8;">Loading remedies...</span>';
 
@@ -750,7 +773,6 @@ HTML_PAGE = """<!DOCTYPE html>
     }
   }
 
-  // Render remedies with Grade styling
   function renderCurrentRemedies() {
     const minGrade = parseInt(document.getElementById('grade-filter').value) || 1;
     const q = (document.getElementById('remedy-quick-search').value || '').toLowerCase().trim();
@@ -766,7 +788,7 @@ HTML_PAGE = """<!DOCTYPE html>
     document.getElementById('remedies-count-label').textContent = `${filtered.length} of ${currentRemediesList.length} remedies`;
 
     if (filtered.length === 0) {
-      container.innerHTML = '<span style="color: #94a3b8; font-style: italic;">No remedies match filter criteria.</span>';
+      container.innerHTML = '<span style="color: #94a3b8; font-style: italic;">No remedies match current grade/search filter.</span>';
       return;
     }
 
@@ -774,38 +796,50 @@ HTML_PAGE = """<!DOCTYPE html>
       const span = document.createElement('span');
       span.className = `remedy-tag remedy-grade-${rem.degree}`;
       span.textContent = rem.abbrev;
-      span.title = `${rem.name || rem.abbrev} (Grade ${rem.degree})${rem.nosode ? ' [Nosode]' : ''}`;
+      span.title = `${rem.name || rem.abbrev} (Grade ${rem.degree})`;
       span.ondblclick = () => openRemedyModal(rem.id, rem.name, rem.abbrev);
       container.appendChild(span);
     });
   }
 
-  // Global Search across entire Synthesis 2009 (180k rubrics)
-  async function performGlobalSearch(query) {
+  async function executeGlobalSearch() {
+    const query = document.getElementById('global-search-input').value.trim();
     if (!query) return;
+
     const list = document.getElementById('rubrics-list');
-    document.getElementById('chapter-name-title').textContent = `Search: "${query}"`;
-    document.getElementById('selected-rubric-title').textContent = "Select result";
-    list.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8;">Searching entire Synthesis Repertory...</div>';
+    document.getElementById('breadcrumb-content').innerHTML = `Search: <strong>"${escapeHtml(query)}"</strong>`;
+    list.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Searching Synthesis Repertory...</div>';
 
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const rubrics = await res.json();
       list.innerHTML = '';
+
       if (!rubrics || rubrics.length === 0) {
-        list.innerHTML = `<div style="padding: 16px; text-align: center; color: #94a3b8;">No rubrics found matching "${query}".</div>`;
+        list.innerHTML = `<div style="padding: 16px; text-align: center; color: #94a3b8;">No rubrics found matching "${escapeHtml(query)}".</div>`;
         return;
       }
+
       rubrics.forEach(r => {
         const div = document.createElement('div');
         div.className = 'rubric-row';
+
+        let pathHtml = `<div class="rubric-full-path">${escapeHtml(r.parent_path || r.chapter || 'SYNTHESIS')}</div>`;
+        let drillBtnHtml = '';
+        if (r.has_child > 0) {
+          drillBtnHtml = `<button class="drilldown-btn" onclick="event.stopPropagation(); navigateToNode(${r.id}, '${escapeQuote(r.text)}')"><i class="fa-solid fa-folder-tree"></i> Sub-rubrics (${r.has_child})</button>`;
+        }
+
         div.innerHTML = `
-          <div class="rubric-text">
-            <span style="font-size: 11px; color: #0284c7; font-weight: bold; margin-right: 6px;">[${r.chapter || 'SYNTHESIS'}]</span>
-            <span>${escapeHtml(r.text)}</span>
+          <div class="rubric-main-info">
+            ${pathHtml}
+            <span class="rubric-name-text">${escapeHtml(r.text)}</span>
           </div>
-          <span class="rubric-badge">${r.remedy_count} rem</span>
-          <button class="add-to-clip-btn" onclick="event.stopPropagation(); addRubricToClip(${r.id}, '${escapeQuote(r.text)}', ${r.remedy_count})">+ Clip</button>
+          <div class="rubric-badges-col">
+            ${drillBtnHtml}
+            <span class="rubric-badge">${r.remedy_count} rem</span>
+            <button class="add-to-clip-btn" onclick="event.stopPropagation(); addRubricToClip(${r.id}, '${escapeQuote(r.full_path || r.text)}', ${r.remedy_count})">+ Clip</button>
+          </div>
         `;
         div.onclick = () => {
           document.querySelectorAll('.rubric-row').forEach(el => el.classList.remove('active'));
@@ -814,13 +848,13 @@ HTML_PAGE = """<!DOCTYPE html>
         };
         list.appendChild(div);
       });
+
       if (rubrics.length > 0) selectRubric(rubrics[0]);
     } catch (err) {
       list.innerHTML = `<div style="padding: 16px; color: red;">Error: ${err.message}</div>`;
     }
   }
 
-  // Clipboards Handling
   function switchClipboard(clipNum) {
     activeClipboardId = clipNum;
     document.querySelectorAll('.ro-clip-tab').forEach(el => {
@@ -832,23 +866,22 @@ HTML_PAGE = """<!DOCTYPE html>
 
   function addCurrentRubricToClip() {
     if (!currentRubric) return;
-    addRubricToClip(currentRubric.id, currentRubric.text, currentRubric.remedy_count || currentRemediesList.length);
+    addRubricToClip(currentRubric.id, currentRubric.full_path || currentRubric.text, currentRubric.remedy_count);
   }
 
-  async function addRubricToClip(rubricId, text, remedyCount) {
+  async function addRubricToClip(rubricId, fullPath, remedyCount) {
     const clip = clipboards[activeClipboardId];
     if (clip.some(item => item.id === rubricId)) {
-      alert("This symptom is already in the active clipboard.");
+      alert("This symptom is already in this clipboard.");
       return;
     }
 
-    // Fetch remedies for scoring
     const res = await fetch(`/api/remedies?rubric_id=${rubricId}`);
     const remedies = await res.json();
 
     clip.push({
       id: rubricId,
-      text: text,
+      full_path: fullPath,
       remedy_count: remedyCount,
       remedies: remedies
     });
@@ -865,28 +898,25 @@ HTML_PAGE = """<!DOCTYPE html>
     }
   }
 
-  // Repertorization Calculation & Matrix Render
   function recalculateMatrix() {
     const clip = clipboards[activeClipboardId];
     const headerRow = document.getElementById('matrix-header-row');
     const tbody = document.getElementById('matrix-body');
 
     if (!clip || clip.length === 0) {
-      headerRow.innerHTML = '<th style="min-width: 140px; text-align: left;">Symptom (Rubric)</th><th style="width: 40px;">Rem</th>';
+      headerRow.innerHTML = '<th style="min-width: 140px; text-align: left;">Symptom (Rubric)</th><th style="width: 35px;">Rem</th>';
       tbody.innerHTML = `
         <tr>
           <td colspan="2" style="padding: 30px; text-align: center; color: #94a3b8;">
             <i class="fa-regular fa-clipboard" style="font-size: 28px; margin-bottom: 8px; display: block;"></i>
-            Clipboard ${activeClipboardId} is empty.<br>Click <strong>+ Take to Clipboard</strong> on any symptom to repertorize.
+            Clipboard ${activeClipboardId} is empty.<br>Click <strong>+ Take to Clip</strong> on any symptom to repertorize.
           </td>
         </tr>
       `;
       return;
     }
 
-    // Aggregate remedies
-    const remedyStats = {}; // { abbrev: { id, name, totalScore, symptomsCovered, grades: { rubricId: degree } } }
-
+    const remedyStats = {};
     clip.forEach(rubric => {
       rubric.remedies.forEach(rem => {
         if (!remedyStats[rem.abbrev]) {
@@ -906,53 +936,46 @@ HTML_PAGE = """<!DOCTYPE html>
     });
 
     const sortMode = document.getElementById('sort-remedy-mode').value;
-    let sortedRemedies = Object.values(remedyStats);
+    let sorted = Object.values(remedyStats);
     if (sortMode === 'score') {
-      sortedRemedies.sort((a, b) => b.totalScore - a.totalScore || b.symptomsCovered - a.symptomsCovered);
+      sorted.sort((a, b) => b.totalScore - a.totalScore || b.symptomsCovered - a.symptomsCovered);
     } else if (sortMode === 'symptoms') {
-      sortedRemedies.sort((a, b) => b.symptomsCovered - a.symptomsCovered || b.totalScore - a.totalScore);
+      sorted.sort((a, b) => b.symptomsCovered - a.symptomsCovered || b.totalScore - a.totalScore);
     } else {
-      sortedRemedies.sort((a, b) => a.abbrev.localeCompare(b.abbrev));
+      sorted.sort((a, b) => a.abbrev.localeCompare(b.abbrev));
     }
 
-    // Top 20 remedies for display width
-    const displayRemedies = sortedRemedies.slice(0, 20);
+    const displayRemedies = sorted.slice(0, 20);
 
-    // Build Header
     let hHtml = '<th style="min-width: 150px; text-align: left;">Symptom (Rubric)</th><th style="width: 35px;">Rem</th>';
     displayRemedies.forEach(r => {
       hHtml += `
-        <th class="remedy-header" title="${r.name || r.abbrev}" onclick="openRemedyModal(${r.id}, '${escapeQuote(r.name)}', '${escapeQuote(r.abbrev)}')">
-          <span class="remedy-abbrev-v">${r.abbrev}</span>
+        <th class="remedy-header" title="${escapeHtml(r.name || r.abbrev)}" onclick="openRemedyModal(${r.id}, '${escapeQuote(r.name)}', '${escapeQuote(r.abbrev)}')">
+          <span style="font-weight: 700; display: block;">${r.abbrev}</span>
           <span style="font-size: 10px; color: #64748b;">${r.symptomsCovered}/${r.totalScore}</span>
         </th>
       `;
     });
     headerRow.innerHTML = hHtml;
 
-    // Summary Rows (Symptoms Count & Total Points)
     let bHtml = '';
-    
-    // Row 1: Symptoms Covered Count
     bHtml += '<tr style="background: #e2e8f0; font-weight: bold;"><td class="rubric-title-cell"><strong>Total Symptoms Covered</strong></td><td>-</td>';
     displayRemedies.forEach(r => {
       bHtml += `<td style="color: #0369a1; font-weight: 700;">${r.symptomsCovered}</td>`;
     });
     bHtml += '</tr>';
 
-    // Row 2: Total Degrees Sum
     bHtml += '<tr style="background: #f1f5f9; font-weight: bold;"><td class="rubric-title-cell"><strong>Sum of Degrees (Points)</strong></td><td>-</td>';
     displayRemedies.forEach(r => {
       bHtml += `<td style="color: #dc2626; font-weight: 700;">${r.totalScore}</td>`;
     });
     bHtml += '</tr>';
 
-    // Rubric Rows
     clip.forEach(rubric => {
       bHtml += `<tr>
-        <td class="rubric-title-cell" title="${escapeHtml(rubric.text)}">
-          <i class="fa-solid fa-xmark" style="color: #ef4444; cursor: pointer; margin-right: 6px;" title="Remove symptom" onclick="removeRubricFromClip(${rubric.id})"></i>
-          ${escapeHtml(rubric.text)}
+        <td class="rubric-title-cell" title="${escapeHtml(rubric.full_path)}">
+          <i class="fa-solid fa-xmark" style="color: #ef4444; cursor: pointer; margin-right: 6px;" title="Remove" onclick="removeRubricFromClip(${rubric.id})"></i>
+          ${escapeHtml(rubric.full_path)}
         </td>
         <td style="font-size: 10px; color: #64748b;">${rubric.remedy_count}</td>
       `;
@@ -977,12 +1000,10 @@ HTML_PAGE = """<!DOCTYPE html>
     recalculateMatrix();
   }
 
-  // Remedy Modal Dialog
   async function openRemedyModal(remedyId, remedyName, remedyAbbrev) {
     const modal = document.getElementById('remedy-modal');
-    const title = document.getElementById('modal-remedy-name');
+    document.getElementById('modal-remedy-name').innerHTML = `<i class="fa-solid fa-capsules"></i> ${escapeHtml(remedyName || remedyAbbrev)} (${escapeHtml(remedyAbbrev)})`;
     const body = document.getElementById('modal-remedy-body');
-    title.innerHTML = `<i class="fa-solid fa-capsules"></i> ${remedyName || remedyAbbrev} (${remedyAbbrev})`;
     body.innerHTML = 'Loading remedy passport & botanical information...';
     modal.style.display = 'flex';
 
@@ -990,24 +1011,22 @@ HTML_PAGE = """<!DOCTYPE html>
       const res = await fetch(`/api/remedy_details?id=${remedyId}`);
       const data = await res.json();
       body.innerHTML = `
-        <div style="margin-bottom: 12px;"><strong>Abbreviation:</strong> ${data.abbrev || '-'}</div>
-        <div style="margin-bottom: 12px;"><strong>Full Name:</strong> ${data.name || '-'}</div>
-        <div style="margin-bottom: 12px;"><strong>Scientific / Botanical Name:</strong> ${data.scientific_name || '-'}</div>
-        <div style="margin-bottom: 12px;"><strong>Common Names:</strong> ${data.common_names || '-'}</div>
-        <div style="margin-bottom: 12px;"><strong>Origin / Kingdom:</strong> ${data.origin || 'Standard Homeopathic Provings'}</div>
-        <div style="margin-bottom: 12px;"><strong>Is Nosode:</strong> ${data.nosode ? 'Yes' : 'No'}</div>
-        <div style="margin-bottom: 12px;"><strong>Synthesis Frequency:</strong> ${data.frequency || 0} rubrics in Synthesis</div>
-        <div style="margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 6px; font-size: 12px;">
-          <strong>Research Info:</strong><br>
-          ${data.research_info || 'No external research notes attached in WinCHIP.'}
+        <div style="margin-bottom: 10px;"><strong>Abbreviation:</strong> ${data.abbrev || '-'}</div>
+        <div style="margin-bottom: 10px;"><strong>Full Name:</strong> ${data.name || '-'}</div>
+        <div style="margin-bottom: 10px;"><strong>Scientific / Botanical:</strong> ${data.scientific_name || '-'}</div>
+        <div style="margin-bottom: 10px;"><strong>Common Names:</strong> ${data.common_names || '-'}</div>
+        <div style="margin-bottom: 10px;"><strong>Is Nosode:</strong> ${data.nosode ? 'Yes' : 'No'}</div>
+        <div style="margin-bottom: 10px;"><strong>Synthesis Frequency:</strong> ${data.frequency || 0} occurrences</div>
+        <div style="margin-top: 14px; padding: 10px; background: #f1f5f9; border-radius: 4px; font-size: 11.5px;">
+          <strong>Research Notes:</strong><br>${data.research_info || 'No external research notes.'}
         </div>
       `;
     } catch (err) {
-      body.innerHTML = `<span style="color: red;">Failed to load remedy details: ${err.message}</span>`;
+      body.innerHTML = `<span style="color: red;">Failed to load remedy details.</span>`;
     }
   }
 
-  function closeRemedyModal(event) {
+  function closeRemedyModal() {
     document.getElementById('remedy-modal').style.display = 'none';
   }
 
@@ -1040,12 +1059,13 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
             self.wfile.write(HTML_PAGE.encode("utf-8"))
 
         elif path == "/api/chapters":
-            # Level 1 rubrics in Synthesis 2009 (MIND, VERTIGO, HEAD, etc.)
             sql = '''
-            SELECT DISTINCT dro.dro_documentrecordid as id, dro.dro_order as ord, drt.drt_text as name
+            SELECT dro.dro_documentrecordid as id, dro.dro_order as ord, drt.drt_text as name
             FROM "_000000002".documentrecordorder dro
-            JOIN "_000000002".documentrecordtext drt ON dro.dro_documentrecordid = drt.drt_documentrecordid
-            WHERE drt.drt_documentdescriptionid = 2 AND dro.dro_parentid = 1
+            JOIN "_000000002".documentrecordtext drt 
+              ON dro.dro_documentrecordid = drt.drt_documentrecordid
+             AND drt.drt_documentdescriptionid = 2
+            WHERE dro.dro_documentsortingid = 2 AND dro.dro_parentid = 1
             ORDER BY dro.dro_order;
             '''
             try:
@@ -1055,30 +1075,32 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(e)}, 500)
 
         elif path == "/api/rubrics":
-            chapter_id = qs.get("chapter_id", ["3"])[0]
+            parent_id = qs.get("parent_id", ["3"])[0]
             q = qs.get("q", [""])[0].strip()
-            
-            if q:
-                sql = f'''
-                SELECT dro.dro_documentrecordid as id, drt.drt_text as text,
-                       (SELECT count(*) FROM "_000000002".hom_addition ha WHERE ha.ra_rubricid = dro.dro_documentrecordid) as remedy_count
-                FROM "_000000002".documentrecordorder dro
-                JOIN "_000000002".documentrecordtext drt ON dro.dro_documentrecordid = drt.drt_documentrecordid
-                WHERE drt.drt_documentdescriptionid = 2 AND dro.dro_parentid = {chapter_id}
-                  AND drt.drt_text ILIKE '%{q}%'
-                ORDER BY dro.dro_order
-                LIMIT 80;
-                '''
-            else:
-                sql = f'''
-                SELECT dro.dro_documentrecordid as id, drt.drt_text as text,
-                       (SELECT count(*) FROM "_000000002".hom_addition ha WHERE ha.ra_rubricid = dro.dro_documentrecordid) as remedy_count
-                FROM "_000000002".documentrecordorder dro
-                JOIN "_000000002".documentrecordtext drt ON dro.dro_documentrecordid = drt.drt_documentrecordid
-                WHERE drt.drt_documentdescriptionid = 2 AND dro.dro_parentid = {chapter_id}
-                ORDER BY dro.dro_order
-                LIMIT 80;
-                '''
+
+            where_q = f"AND drt.drt_text ILIKE '%{q}%'" if q else ""
+            sql = f'''
+            SELECT dro.dro_documentrecordid as id,
+                   dro.dro_parentid as parent_id,
+                   dro.dro_level as level,
+                   dro.dro_havechild as has_child,
+                   drt.drt_text as text,
+                   pdrt.drt_text as parent_path,
+                   concat_ws(' > ', pdrt.drt_text, drt.drt_text) as full_path,
+                   (SELECT count(*) FROM "_000000002".hom_addition ha WHERE ha.ra_rubricid = dro.dro_documentrecordid) as remedy_count
+            FROM "_000000002".documentrecordorder dro
+            JOIN "_000000002".documentrecordtext drt 
+              ON dro.dro_documentrecordid = drt.drt_documentrecordid 
+             AND drt.drt_documentdescriptionid = 2
+            LEFT JOIN "_000000002".documentrecordtext pdrt
+              ON dro.dro_parentid = pdrt.drt_documentrecordid
+             AND pdrt.drt_documentdescriptionid = 2
+            WHERE dro.dro_documentsortingid = 2 
+              AND dro.dro_parentid = {parent_id}
+              {where_q}
+            ORDER BY dro.dro_order, dro.dro_suborder
+            LIMIT 100;
+            '''
             try:
                 rows = run_query_json(sql)
                 self.send_json(rows)
@@ -1086,19 +1108,44 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(e)}, 500)
 
         elif path == "/api/search":
-            q = qs.get("q", [""])[0].strip()
+            q = qs.get("q", [""])[0].strip().lower()
             if not q:
                 self.send_json([])
                 return
+
+            # Medical synonym expansions
+            query_conditions = []
+            if "headache" in q:
+                alt = q.replace("headache", "").strip()
+                query_conditions.append(f"(drt.drt_text ILIKE '%pain%' AND (pdrt.drt_text ILIKE '%head%' OR drt.drt_text ILIKE '%head%'))")
+                if alt:
+                    query_conditions.append(f"drt.drt_text ILIKE '%{alt}%'")
+            
             words = q.split()
-            where_clauses = " AND ".join([f"drt.drt_text ILIKE '%{w}%'" for w in words])
+            standard_condition = " AND ".join([f"(drt.drt_text ILIKE '%{w}%' OR pdrt.drt_text ILIKE '%{w}%')" for w in words])
+            query_conditions.append(standard_condition)
+
+            combined_where = " OR ".join([f"({c})" for c in query_conditions])
+
             sql = f'''
-            SELECT dro.dro_documentrecordid as id, drt.drt_text as text,
+            SELECT dro.dro_documentrecordid as id,
+                   dro.dro_level as level,
+                   dro.dro_havechild as has_child,
+                   drt.drt_text as text,
+                   pdrt.drt_text as parent_path,
+                   concat_ws(' > ', pdrt.drt_text, drt.drt_text) as full_path,
                    (SELECT count(*) FROM "_000000002".hom_addition ha WHERE ha.ra_rubricid = dro.dro_documentrecordid) as remedy_count
             FROM "_000000002".documentrecordorder dro
-            JOIN "_000000002".documentrecordtext drt ON dro.dro_documentrecordid = drt.drt_documentrecordid
-            WHERE drt.drt_documentdescriptionid = 2 AND {where_clauses}
-            LIMIT 100;
+            JOIN "_000000002".documentrecordtext drt 
+              ON dro.dro_documentrecordid = drt.drt_documentrecordid 
+             AND drt.drt_documentdescriptionid = 2
+            LEFT JOIN "_000000002".documentrecordtext pdrt
+              ON dro.dro_parentid = pdrt.drt_documentrecordid
+             AND pdrt.drt_documentdescriptionid = 2
+            WHERE dro.dro_documentsortingid = 2
+              AND ({combined_where})
+            ORDER BY remedy_count DESC, dro.dro_order
+            LIMIT 80;
             '''
             try:
                 rows = run_query_json(sql)
@@ -1154,14 +1201,11 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
 def main():
     server = HTTPServer(("127.0.0.1", PORT), RadarOpusHandler)
     url = f"http://127.0.0.1:{PORT}"
-    print(f"======================================================")
-    print(f" RadarOpus Web UI Server running at {url}")
-    print(f" Connected to PostgreSQL (RadarOpus-WinCHIP)")
-    print(f"======================================================")
+    print(f"RadarOpus Web UI Server running at {url}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping RadarOpus Web UI server...")
+        pass
 
 if __name__ == "__main__":
     main()
