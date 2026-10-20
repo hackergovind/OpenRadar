@@ -1,39 +1,29 @@
 import os
 import sys
 import json
-import subprocess
+import sqlite3
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-PORT = 8080
-BIN_PSQL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "psql.exe")
-DB_NAME = "RadarOpus-WinCHIP"
-DB_HOST = "127.0.0.1"
-DB_PORT = "5432"
-DB_USER = "postgres"
-DB_PASS = "admin123"
+PORT = int(os.environ.get("PORT", 8080))
+HOST = os.environ.get("HOST", "0.0.0.0")
 
-def run_query_json(sql):
-    env = os.environ.copy()
-    env["PGPASSWORD"] = DB_PASS
-    cleaned_sql = sql.strip().rstrip(";")
-    wrapped = f"SELECT json_agg(t) FROM ({cleaned_sql}) t;"
-    cmd = [
-        BIN_PSQL,
-        "-h", DB_HOST,
-        "-p", DB_PORT,
-        "-U", DB_USER,
-        "-d", DB_NAME,
-        "-t", "-A",
-        "-c", wrapped
-    ]
-    res = subprocess.run(cmd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if res.returncode != 0:
-        raise Exception(res.stderr.strip() or "Query failed")
-    raw = res.stdout.strip()
-    if not raw or raw == "null":
-        return []
-    return json.loads(raw)
+# Database Path - prioritize openradar.db
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "openradar.db")
+if not os.path.exists(DB_PATH):
+    alt = os.path.join(os.path.dirname(BASE_DIR), "OpenRadar", "openradar.db")
+    if os.path.exists(alt):
+        DB_PATH = alt
+
+def query_db(sql, params=()):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -1083,152 +1073,162 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
             self.wfile.write(HTML_PAGE.encode("utf-8"))
 
         elif path == "/api/chapters":
-            sql = '''
-            SELECT dro.dro_documentrecordid as id, dro.dro_order as ord, drt.drt_text as name
-            FROM "_000000002".documentrecordorder dro
-            JOIN "_000000002".documentrecordtext drt 
-              ON dro.dro_documentrecordid = drt.drt_documentrecordid
-             AND drt.drt_documentdescriptionid = 2
-            WHERE dro.dro_documentsortingid = 2 AND dro.dro_parentid = 1
-            ORDER BY dro.dro_order;
-            '''
+            sql = "SELECT id, order_idx as ord, name FROM chapters ORDER BY order_idx;"
             try:
-                rows = run_query_json(sql)
+                rows = query_db(sql)
                 self.send_json(rows)
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
 
         elif path == "/api/rubrics":
-            parent_id = qs.get("parent_id", ["3"])[0]
+            try:
+                parent_id = int(qs.get("parent_id", ["3"])[0])
+            except ValueError:
+                parent_id = 3
             q = qs.get("q", [""])[0].strip()
 
-            where_q = f"AND drt.drt_text ILIKE '%{q}%'" if q else ""
-            sql = f'''
-            SELECT dro.dro_documentrecordid as id,
-                   dro.dro_parentid as parent_id,
-                   dro.dro_level as level,
-                   dro.dro_havechild as has_child,
-                   drt.drt_text as text,
-                   pdrt.drt_text as parent_path,
-                   concat_ws(' > ', pdrt.drt_text, drt.drt_text) as full_path,
-                   (SELECT count(*) FROM "_000000002".hom_addition ha WHERE ha.ra_rubricid = dro.dro_documentrecordid) as remedy_count
-            FROM "_000000002".documentrecordorder dro
-            JOIN "_000000002".documentrecordtext drt 
-              ON dro.dro_documentrecordid = drt.drt_documentrecordid 
-             AND drt.drt_documentdescriptionid = 2
-            LEFT JOIN "_000000002".documentrecordtext pdrt
-              ON dro.dro_parentid = pdrt.drt_documentrecordid
-             AND pdrt.drt_documentdescriptionid = 2
-            WHERE dro.dro_documentsortingid = 2 
-              AND dro.dro_parentid = {parent_id}
-              {where_q}
-            ORDER BY dro.dro_order, dro.dro_suborder
-            LIMIT 100;
-            '''
+            if q:
+                sql = """
+                SELECT id, parent_id, level, has_child, text, parent_path, full_path, remedy_count
+                FROM rubrics
+                WHERE parent_id = ? AND text LIKE ?
+                ORDER BY order_idx, suborder_idx
+                LIMIT 100;
+                """
+                params = (parent_id, f"%{q}%")
+            else:
+                sql = """
+                SELECT id, parent_id, level, has_child, text, parent_path, full_path, remedy_count
+                FROM rubrics
+                WHERE parent_id = ?
+                ORDER BY order_idx, suborder_idx
+                LIMIT 100;
+                """
+                params = (parent_id,)
             try:
-                rows = run_query_json(sql)
+                rows = query_db(sql, params)
                 self.send_json(rows)
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
 
         elif path == "/api/search":
-            q = qs.get("q", [""])[0].strip().lower()
+            q = qs.get("q", [""])[0].strip()
             if not q:
                 self.send_json([])
                 return
 
-            # Medical synonym expansions
-            query_conditions = []
-            if "headache" in q:
-                alt = q.replace("headache", "").strip()
-                query_conditions.append(f"(drt.drt_text ILIKE '%pain%' AND (pdrt.drt_text ILIKE '%head%' OR drt.drt_text ILIKE '%head%'))")
+            q_lower = q.lower()
+            query_parts = []
+            params = []
+
+            # Medical synonym expansions for clinical repertorization
+            if "headache" in q_lower:
+                alt = q_lower.replace("headache", "").strip()
                 if alt:
-                    query_conditions.append(f"drt.drt_text ILIKE '%{alt}%'")
-            
+                    query_parts.append("(text LIKE ? AND (parent_path LIKE '%head%' OR full_path LIKE '%head%') AND text LIKE ?)")
+                    params.extend(["%pain%", f"%{alt}%"])
+                else:
+                    query_parts.append("(text LIKE ? AND (parent_path LIKE '%head%' OR full_path LIKE '%head%'))")
+                    params.append("%pain%")
+
+            # General multi-word matching
             words = q.split()
-            standard_condition = " AND ".join([f"(drt.drt_text ILIKE '%{w}%' OR pdrt.drt_text ILIKE '%{w}%')" for w in words])
-            query_conditions.append(standard_condition)
+            word_conditions = []
+            for w in words:
+                word_conditions.append("(text LIKE ? OR parent_path LIKE ? OR full_path LIKE ?)")
+                params.extend([f"%{w}%", f"%{w}%", f"%{w}%"])
 
-            combined_where = " OR ".join([f"({c})" for c in query_conditions])
+            if word_conditions:
+                query_parts.append("(" + " AND ".join(word_conditions) + ")")
 
-            sql = f'''
-            SELECT dro.dro_documentrecordid as id,
-                   dro.dro_level as level,
-                   dro.dro_havechild as has_child,
-                   drt.drt_text as text,
-                   pdrt.drt_text as parent_path,
-                   concat_ws(' > ', pdrt.drt_text, drt.drt_text) as full_path,
-                   (SELECT count(*) FROM "_000000002".hom_addition ha WHERE ha.ra_rubricid = dro.dro_documentrecordid) as remedy_count
-            FROM "_000000002".documentrecordorder dro
-            JOIN "_000000002".documentrecordtext drt 
-              ON dro.dro_documentrecordid = drt.drt_documentrecordid 
-             AND drt.drt_documentdescriptionid = 2
-            LEFT JOIN "_000000002".documentrecordtext pdrt
-              ON dro.dro_parentid = pdrt.drt_documentrecordid
-             AND pdrt.drt_documentdescriptionid = 2
-            WHERE dro.dro_documentsortingid = 2
-              AND ({combined_where})
-            ORDER BY remedy_count DESC, dro.dro_order
+            where_clause = " OR ".join(query_parts) if query_parts else "1=1"
+            sql = f"""
+            SELECT id, level, has_child, text, parent_path, full_path, remedy_count
+            FROM rubrics
+            WHERE {where_clause}
+            ORDER BY remedy_count DESC, order_idx ASC
             LIMIT 80;
-            '''
+            """
             try:
-                rows = run_query_json(sql)
+                rows = query_db(sql, params)
                 self.send_json(rows)
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
 
         elif path == "/api/remedies":
-            rubric_id = qs.get("rubric_id", [""])[0]
-            if not rubric_id:
+            rubric_id_str = qs.get("rubric_id", [""])[0]
+            if not rubric_id_str:
                 self.send_json([])
                 return
-            sql = f'''
-            SELECT ha.ra_objectid as id, ha.ra_degree as degree, hr.r_abbrev as abbrev, hr.r_name as name, hr.r_nosode as nosode
-            FROM "_000000002".hom_addition ha
-            JOIN homeo.hom_remedy hr ON ha.ra_objectid = hr.r_id
-            WHERE ha.ra_rubricid = {rubric_id}
-            ORDER BY ha.ra_degree DESC, hr.r_abbrev ASC;
-            '''
             try:
-                rows = run_query_json(sql)
+                rubric_id = int(rubric_id_str)
+            except ValueError:
+                self.send_json([])
+                return
+
+            sql = """
+            SELECT rr.remedy_id as id, rr.degree as degree, r.abbrev as abbrev, r.name as name, r.is_nosode as nosode
+            FROM rubric_remedies rr
+            JOIN remedies r ON rr.remedy_id = r.id
+            WHERE rr.rubric_id = ?
+            ORDER BY rr.degree DESC, r.abbrev ASC;
+            """
+            try:
+                rows = query_db(sql, (rubric_id,))
                 self.send_json(rows)
             except Exception as e:
                 self.send_json({"error": str(e)}, 500)
 
         elif path == "/api/remedy_details":
-            remedy_id = qs.get("id", [""])[0]
-            if not remedy_id:
+            remedy_id_str = qs.get("id", [""])[0]
+            if not remedy_id_str:
                 self.send_json({})
                 return
-            sql = f'''
-            SELECT r_id as id, r_abbrev as abbrev, r_name as name, r_origin as origin,
-                   r_frequence as frequency, r_scientificname as scientific_name,
-                   r_nosode as nosode, r_commonnames as common_names, r_researchinfo as research_info
-            FROM homeo.hom_remedy
-            WHERE r_id = {remedy_id}
-            LIMIT 1;
-            '''
             try:
-                rows = run_query_json(sql)
+                remedy_id = int(remedy_id_str)
+            except ValueError:
+                self.send_json({})
+                return
+
+            sql = """
+            SELECT id, abbrev, name, origin, frequency, scientific_name,
+                   is_nosode as nosode, common_names, research_info
+            FROM remedies
+            WHERE id = ?
+            LIMIT 1;
+            """
+            try:
+                rows = query_db(sql, (remedy_id,))
                 data = rows[0] if rows else {}
                 abbrev = data.get("abbrev", "").rstrip(".")
                 
-                # Check images
-                img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Image")
+                # Check media candidates in local or project directories
+                candidate_dirs = [
+                    os.path.join(BASE_DIR, "notRadarOpus", "Files", "Remedies"),
+                    os.path.join(os.path.dirname(BASE_DIR), "PostgreSQL", "notRadarOpus", "Files", "Remedies"),
+                    r"L:\Project\PostgreSQL\notRadarOpus\Files\Remedies"
+                ]
+
                 images = []
-                if os.path.exists(img_dir) and abbrev:
-                    for f in os.listdir(img_dir):
-                        if f.lower().startswith(abbrev.lower() + ".") or f.lower().startswith(abbrev.lower() + "-"):
-                            images.append(f)
+                for base in candidate_dirs:
+                    img_dir = os.path.join(base, "Image")
+                    if os.path.exists(img_dir) and abbrev:
+                        for f in os.listdir(img_dir):
+                            if f.lower().startswith(abbrev.lower() + ".") or f.lower().startswith(abbrev.lower() + "-"):
+                                images.append(f)
+                        if images:
+                            break
                 data["images"] = images
 
-                # Check sounds
-                snd_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Sound")
                 sounds = []
-                if os.path.exists(snd_dir) and abbrev:
-                    for f in os.listdir(snd_dir):
-                        if f.lower().startswith(abbrev.lower() + ".") or f.lower().startswith(abbrev.lower() + " "):
-                            sounds.append(f)
+                for base in candidate_dirs:
+                    snd_dir = os.path.join(base, "Sound")
+                    if os.path.exists(snd_dir) and abbrev:
+                        for f in os.listdir(snd_dir):
+                            if f.lower().startswith(abbrev.lower() + ".") or f.lower().startswith(abbrev.lower() + " "):
+                                sounds.append(f)
+                        if sounds:
+                            break
                 data["sounds"] = sounds
 
                 self.send_json(data)
@@ -1240,8 +1240,18 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
             if not file_name or ".." in file_name or "/" in file_name or "\\" in file_name:
                 self.send_error(400)
                 return
-            file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Image", file_name)
-            if not os.path.exists(file_path):
+            candidate_dirs = [
+                os.path.join(BASE_DIR, "notRadarOpus", "Files", "Remedies", "Image"),
+                os.path.join(os.path.dirname(BASE_DIR), "PostgreSQL", "notRadarOpus", "Files", "Remedies", "Image"),
+                r"L:\Project\PostgreSQL\notRadarOpus\Files\Remedies\Image"
+            ]
+            file_path = None
+            for d in candidate_dirs:
+                p = os.path.join(d, file_name)
+                if os.path.exists(p):
+                    file_path = p
+                    break
+            if not file_path:
                 self.send_error(404)
                 return
             self.send_response(200)
@@ -1256,8 +1266,18 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
             if not file_name or ".." in file_name or "/" in file_name or "\\" in file_name:
                 self.send_error(400)
                 return
-            file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notRadarOpus", "Files", "Remedies", "Sound", file_name)
-            if not os.path.exists(file_path):
+            candidate_dirs = [
+                os.path.join(BASE_DIR, "notRadarOpus", "Files", "Remedies", "Sound"),
+                os.path.join(os.path.dirname(BASE_DIR), "PostgreSQL", "notRadarOpus", "Files", "Remedies", "Sound"),
+                r"L:\Project\PostgreSQL\notRadarOpus\Files\Remedies\Sound"
+            ]
+            file_path = None
+            for d in candidate_dirs:
+                p = os.path.join(d, file_name)
+                if os.path.exists(p):
+                    file_path = p
+                    break
+            if not file_path:
                 self.send_error(404)
                 return
             self.send_response(200)
@@ -1278,9 +1298,13 @@ class RadarOpusHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode("utf-8"))
 
 def main():
-    server = HTTPServer(("127.0.0.1", PORT), RadarOpusHandler)
-    url = f"http://127.0.0.1:{PORT}"
-    print(f"RadarOpus Web UI Server running at {url}")
+    server = HTTPServer((HOST, PORT), RadarOpusHandler)
+    url = f"http://localhost:{PORT}"
+    print(f"======================================================")
+    print(f" OpenRadar Synthesis Repertory & Practice Management ")
+    print(f" Database: {DB_PATH}")
+    print(f" Server running at: {url}")
+    print(f"======================================================")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
