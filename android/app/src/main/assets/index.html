@@ -791,8 +791,7 @@
     remediesBox.innerHTML = '<span style="color: #94a3b8;">Loading remedies...</span>';
 
     try {
-      const res = await fetch(`/api/remedies?rubric_id=${r.id}`);
-      currentRemediesList = await res.json();
+      currentRemediesList = await apiGet('/api/remedies', { rubric_id: r.id });
       renderCurrentRemedies();
     } catch (err) {
       remediesBox.innerHTML = `<span style="color: red;">Failed to load remedies: ${err.message}</span>`;
@@ -823,7 +822,7 @@
       span.className = `remedy-tag remedy-grade-${rem.degree}`;
       span.textContent = rem.abbrev;
       span.title = `${rem.name || rem.abbrev} (Grade ${rem.degree})`;
-      span.ondblclick = () => openRemedyModal(rem.id, rem.name, rem.abbrev);
+      span.onclick = () => openRemedyModal(rem.id, rem.name, rem.abbrev); span.style.cursor = 'pointer';
       container.appendChild(span);
     });
   }
@@ -837,8 +836,7 @@
     list.innerHTML = '<div style="padding: 16px; text-align: center; color: #94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Searching Synthesis Repertory...</div>';
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-      const rubrics = await res.json();
+      const rubrics = await apiGet('/api/search', { q: query });
       list.innerHTML = '';
 
       if (!rubrics || rubrics.length === 0) {
@@ -902,8 +900,7 @@
       return;
     }
 
-    const res = await fetch(`/api/remedies?rubric_id=${rubricId}`);
-    const remedies = await res.json();
+    const remedies = await apiGet('/api/remedies', { rubric_id: rubricId });
 
     clip.push({
       id: rubricId,

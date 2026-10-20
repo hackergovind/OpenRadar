@@ -41,12 +41,60 @@ android_api_bridge = """
   }
 """
 
-html = html.replace("const res = await fetch('/api/chapters');\n      const chapters = await res.json();", "const chapters = await apiGet('/api/chapters');")
-html = html.replace("const res = await fetch(`/api/rubrics?parent_id=${parentId}&q=${encodeURIComponent(q)}`);\n      const rubrics = await res.json();", "const rubrics = await apiGet('/api/rubrics', { parent_id: parentId, q: q });")
-html = html.replace("const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);\n      const rubrics = await res.json();", "const rubrics = await apiGet('/api/search', { q: q });")
-html = html.replace("const res = await fetch(`/api/remedies?rubric_id=${rubric.id}`);\n      const remedies = await res.json();", "const remedies = await apiGet('/api/remedies', { rubric_id: rubric.id });")
-html = html.replace("const res = await fetch(`/api/remedies?rubric_id=${rubricId}`);\n        const remedies = await res.json();", "const remedies = await apiGet('/api/remedies', { rubric_id: rubricId });")
-html = html.replace("const res = await fetch(`/api/remedy_details?id=${remedyId}`);\n      const data = await res.json();", "const data = await apiGet('/api/remedy_details', { id: remedyId });")
+# Replace all API fetch calls with apiGet
+# 1. Chapters
+html = re.sub(
+    r"const res = await fetch\('/api/chapters'\);\s*const chapters = await res\.json\(\);",
+    "const chapters = await apiGet('/api/chapters');",
+    html
+)
+
+# 2. Rubrics
+html = re.sub(
+    r"const res = await fetch\(`/api/rubrics\?parent_id=\${parentId}&q=\${encodeURIComponent\(q\)}`\);\s*const rubrics = await res\.json\(\);",
+    "const rubrics = await apiGet('/api/rubrics', { parent_id: parentId, q: q });",
+    html
+)
+
+# 3. Search
+html = re.sub(
+    r"const res = await fetch\(`/api/search\?q=\${encodeURIComponent\((query|q)\)}`\);\s*const rubrics = await res\.json\(\);",
+    "const rubrics = await apiGet('/api/search', { q: query });",
+    html
+)
+
+# 4. Remedies in selectRubric
+html = re.sub(
+    r"const res = await fetch\(`/api/remedies\?rubric_id=\${(r|rubric)\.id}`\);\s*currentRemediesList = await res\.json\(\);",
+    "currentRemediesList = await apiGet('/api/remedies', { rubric_id: r.id });",
+    html
+)
+
+# 5. Remedies in recalculateMatrix / clipboard
+html = re.sub(
+    r"const res = await fetch\(`/api/remedies\?rubric_id=\${rubricId}`\);\s*const remedies = await res\.json\(\);",
+    "const remedies = await apiGet('/api/remedies', { rubric_id: rubricId });",
+    html
+)
+
+# 6. Remedy Details
+html = re.sub(
+    r"const res = await fetch\(`/api/remedy_details\?id=\${remedyId}`\);\s*const data = await res\.json\(\);",
+    "const data = await apiGet('/api/remedy_details', { id: remedyId });",
+    html
+)
+
+# 7. Make remedy tags single-clickable for touch/mobile screens
+html = html.replace(
+    "span.ondblclick = () => openRemedyModal(rem.id, rem.name, rem.abbrev);",
+    "span.onclick = () => openRemedyModal(rem.id, rem.name, rem.abbrev); span.style.cursor = 'pointer';"
+)
+
+# 8. Update top status badge to Offline SQLite
+html = html.replace(
+    "Connected: PostgreSQL • 180,684 Rubrics",
+    "Connected: Offline SQLite Engine • 180,683 Rubrics"
+)
 
 html = html.replace("<script>", "<script>\n" + android_api_bridge)
 
