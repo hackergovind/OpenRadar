@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.OpenRadar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#0284c7</item>
+        <item name="colorPrimaryVariant">#0369a1</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <item name="android:statusBarColor">#1e293b</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

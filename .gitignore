@@ -5,3 +5,11 @@ __pycache__/
 data/
 logs/
 bin/
+
+# Android build outputs & SDK local configs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/openradar.db
+*.apk
